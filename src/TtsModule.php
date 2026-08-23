@@ -24,7 +24,7 @@ use BAGArt\TelegramBotTts\Processing\VoiceCommandProcessor;
  */
 class TtsModule implements TgModuleContract
 {
-    public static function descriptor(): TgModuleDescripto
+    public static function descriptor(): TgModuleDescriptor
     {
         return new TgModuleDescriptor(
             id: TtsModuleId::ID,

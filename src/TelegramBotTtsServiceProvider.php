@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace BAGArt\TelegramBotTts;
 
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\ServiceProvider;
 
-final class TelegramBotTtsServiceProvider extends ServiceProvide
+final class TelegramBotTtsServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
