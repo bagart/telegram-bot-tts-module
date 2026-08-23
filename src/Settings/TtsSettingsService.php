@@ -1,0 +1,67 @@
+<?php
+
+declare(strict_types=1);
+
+namespace BAGArt\TelegramBotTts\Settings;
+
+use BAGArt\TelegramBot\Contracts\Modules\ModuleEnablementContract;
+use BAGArt\TelegramBot\Contracts\Modules\ModuleSettingsContract;
+use BAGArt\TelegramBotManagement\Models\TgModuleEnablement;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Reads effective TTS settings and persists chat-level patches into the
+ * module enablement row (same row drives is_enabled), busting caches
+ * through ModuleEnablementContract::refresh() (Summarizer mechanics).
+ */
+class TtsSettingsService
+{
+    public function __construct(
+        private readonly ModuleSettingsContract $settings,
+        private readonly ModuleEnablementContract $enablement,
+    ) {}
+
+    public function get(string $botId, int $chatId): TtsSettings
+    {
+        return TtsSettings::fromArray(
+            $this->settings->settingsFor(TtsModuleId::ID, $botId, $chatId),
+        );
+    }
+
+    public function isEnabled(string $botId, int $chatId): bool
+    {
+        return $this->enablement->isEnabled(TtsModuleId::ID, $botId, $chatId);
+    }
+
+    /**
+     * @param  array<string, mixed>  $patch  settings keys to merge into the chat-level row
+     */
+    public function patch(string $botId, int $chatId, array $patch): void
+    {
+        DB::transaction(function () use ($botId, $chatId, $patch): void {
+            $row = TgModuleEnablement::query()
+                ->where('bot_id', $botId)
+                ->where('chat_id', $chatId)
+                ->where('module_id', TtsModuleId::ID)
+                ->lockForUpdate()
+                ->first();
+
+            if ($row === null) {
+                $row = new TgModuleEnablement([
+                    'bot_id' => $botId,
+                    'chat_id' => $chatId,
+                    'module_id' => TtsModuleId::ID,
+                    'is_enabled' => true,
+                    'module_settings' => [],
+                ]);
+            }
+
+            $current = is_array($row->module_settings) ? $row->module_settings : [];
+            $row->module_settings = array_merge($current, $patch);
+
+            $row->save();
+        });
+
+        $this->enablement->refresh($botId, $chatId);
+    }
+}

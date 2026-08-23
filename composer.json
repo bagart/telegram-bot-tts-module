@@ -1,0 +1,76 @@
+{
+    "$schema": "https://getcomposer.org/schema.json",
+    "name": "bagart/telegram-bot-tts-module",
+    "description": "Text-to-speech module for the Telegram bot platform: /voice command, auto-speak mode, pluggable TTS providers (OpenAI-compatible and edge-tts), fenced multipart upload",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "telegram",
+        "tg-bot",
+        "telegram-bot",
+        "bot-platform",
+        "tts",
+        "text-to-speech",
+        "voice",
+        "module",
+        "tg-module"
+    ],
+    "authors": [
+        {
+            "name": "BAGArt (Artur Baltaev)",
+            "email": "baltaev.artur+ask@gmail.com"
+        }
+    ],
+    "require": {
+        "php": "^8.5"
+    },
+    "suggest": {
+        "bagart/telegram-bot-lib": "Telegram platform runtime contracts (provided by the host app)",
+        "laravel/framework": "^13.0"
+    },
+    "repositories": [
+        {
+            "type": "path",
+            "url": "../telegram-bot-lib"
+        },
+        {
+            "type": "path",
+            "url": "../php-async-kernel-lib"
+        },
+        {
+            "type": "path",
+            "url": "../php-async-kernel-client"
+        }
+    ],
+    "require-dev": {
+        "pestphp/pest": "^4.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "BAGArt\\TelegramBotTts\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "BAGArt\\TelegramBotTts\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "BAGArt\\TelegramBotTts\\TelegramBotTtsServiceProvider"
+            ]
+        }
+    },
+    "scripts": {
+        "test": "composer exec pest",
+        "lint": "pint --dirty"
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
