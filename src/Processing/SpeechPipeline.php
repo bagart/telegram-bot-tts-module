@@ -16,19 +16,17 @@ use BAGArt\TelegramBotTts\I18n\Strings;
 use BAGArt\TelegramBotTts\Media\FfmpegConverter;
 use BAGArt\TelegramBotTts\Media\MediaUploader;
 use BAGArt\TelegramBotTts\Media\MimePolicy;
-use BAGArt\TelegramBotTts\Provider\Adapter\EdgeTts;
-use BAGArt\TelegramBotTts\Provider\Adapter\OpenAiCompatibleTts;
+use BAGArt\TelegramBotTts\Media\VoiceDelivery;
+use BAGArt\TelegramBotTts\Provider\AdapterSelectorContract;
 use BAGArt\TelegramBotTts\Provider\ConfigResolver;
 use BAGArt\TelegramBotTts\Provider\Dto\TtsRequest;
 use BAGArt\TelegramBotTts\Provider\ErrorCode;
 use BAGArt\TelegramBotTts\Provider\ProviderException;
-use BAGArt\TelegramBotTts\Provider\TtsApiStyle;
-use BAGArt\TelegramBotTts\Provider\TtsProviderContract;
-use BAGArt\TelegramBotTts\Provider\VoiceProviderConfig;
 use BAGArt\TelegramBotTts\Settings\TtsSettings;
 use BAGArt\TelegramBotTts\Settings\TtsSettingsService;
 use BAGArt\TelegramBotTts\Support\AudioFileStore;
 use BAGArt\TelegramBotTts\Support\SynthesisRecorder;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -47,6 +45,7 @@ class SpeechPipeline
         private readonly TgSenderContract $sender,
         private readonly TtsSettingsService $settingsService,
         private readonly ConfigResolver $configResolver,
+        private readonly AdapterSelectorContract $adapters,
         private readonly QuotaCounter $quota,
         private readonly ChatSemaphore $chatSemaphore,
         private readonly GlobalConcurrencyLimiter $concurrency,
@@ -137,7 +136,7 @@ class SpeechPipeline
             $startedAt = microtime(true);
 
             // 6 synthesis
-            $result = $this->adapterFor($config)->synthesize(new TtsRequest(
+            $result = $this->adapters->for($config)->synthesize(new TtsRequest(
                 text: $text,
                 config: $config,
                 voice: $voice,
@@ -171,7 +170,11 @@ class SpeechPipeline
             $this->breaker->recordFailure($config->key);
             $this->sendErrorSurface($botConfig, $chatId, $e->errorCode, $settings, $isPrivateChat);
         } catch (Throwable $e) {
-            Log::warning('TTS: pipeline failure', ['exception' => $e::class]);
+            Log::warning('TTS: pipeline failure', [
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+                'at' => $e->getFile().':'.$e->getLine(),
+            ]);
             $this->metrics->recordSynthesis($botId, $config->key, 'error');
             $this->sendErrorSurface($botConfig, $chatId, ErrorCode::Unavailable, $settings, $isPrivateChat);
         } finally {
@@ -224,13 +227,13 @@ class SpeechPipeline
     ): void {
         $delivery = MimePolicy::deliveryFor($mimeType);
 
-        if ($delivery === MimePolicy::Voice) {
+        if ($delivery === VoiceDelivery::Voice) {
             $this->uploader->sendVoiceOrAudio($botToken, $chatId, $path, $mimeType, $caption, asVoice: true);
 
             return;
         }
 
-        if ($delivery === MimePolicy::Convert && $this->ffmpeg->isAvailable()) {
+        if ($delivery === VoiceDelivery::Convert && $this->ffmpeg->isAvailable()) {
             $converted = $this->ffmpeg->convertToOggOpus($path);
 
             try {
@@ -243,14 +246,6 @@ class SpeechPipeline
         }
 
         $this->uploader->sendVoiceOrAudio($botToken, $chatId, $path, $mimeType, $caption, asVoice: false);
-    }
-
-    private function adapterFor(VoiceProviderConfig $config): TtsProviderContract
-    {
-        return match ($config->apiStyle) {
-            TtsApiStyle::EdgeTts => new EdgeTts,
-            TtsApiStyle::OpenaiTts => new OpenAiCompatibleTts,
-        };
     }
 
     /**

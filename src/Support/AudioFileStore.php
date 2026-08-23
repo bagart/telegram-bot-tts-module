@@ -53,11 +53,21 @@ class AudioFileStore
             throw new RuntimeException('Cannot create TTS storage directory');
         }
 
-        if (@file_put_contents($path, $binary) === false) {
-            throw new RuntimeException('Cannot persist audio tmpfile');
+        // Atomic publish: concurrent identical requests may synthesize in
+        // parallel; rename guarantees readers never see a half-written file.
+        $tmpPath = $path.'.'.bin2hex(random_bytes(4)).'.tmp';
+
+        if (@file_put_contents($tmpPath, $binary) === false) {
+            throw new RuntimeException('Cannot persist audio file');
         }
 
-        chmod($path, 0600);
+        chmod($tmpPath, 0600);
+
+        if (! @rename($tmpPath, $path)) {
+            @unlink($tmpPath);
+
+            throw new RuntimeException('Cannot publish audio file');
+        }
     }
 
     public function delete(string $path): void

@@ -7,6 +7,7 @@ namespace BAGArt\TelegramBotTts\Settings;
 use BAGArt\TelegramBot\Contracts\Modules\ModuleEnablementContract;
 use BAGArt\TelegramBot\Contracts\Modules\ModuleSettingsContract;
 use BAGArt\TelegramBotManagement\Models\TgModuleEnablement;
+use BAGArt\TelegramBotTts\TtsModuleId;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -58,6 +59,12 @@ class TtsSettingsService
 
             $current = is_array($row->module_settings) ? $row->module_settings : [];
             $row->module_settings = array_merge($current, $patch);
+
+            if (array_key_exists('enabled', $patch)) {
+                // Chat-level opt-in/out (same key drives the enablement
+                // selector; absence of a row inherits bot/platform default).
+                $row->is_enabled = (bool) $patch['enabled'];
+            }
 
             $row->save();
         });

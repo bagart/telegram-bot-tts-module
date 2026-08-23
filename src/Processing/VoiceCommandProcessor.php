@@ -90,9 +90,10 @@ class VoiceCommandProcessor implements TgModuleProcessorContract
 
         try {
             if (! $isPrivate && ! $this->access->canManage($botConfig, $chatId, $dto->from, isPrivateChat: false)) {
+                $locale = $this->settings->get($botId, $chatId)->locale;
                 $this->sender->send($botConfig, new SendMessageMethodDTO(
                     chatId: (string) $chatId,
-                    text: Strings::get('ru', 'denied.group'),
+                    text: Strings::get($locale, 'denied.group'),
                 ));
 
                 return;

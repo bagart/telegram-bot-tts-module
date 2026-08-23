@@ -178,7 +178,7 @@ class MediaUploader
         }
     }
 
-    private function rethrow(string $message, \Throwable $previous): neve
+    private function rethrow(string $message, \Throwable $previous): never
     {
         throw new RuntimeException($message.': '.$previous->getMessage(), 0, $previous);
     }

@@ -32,6 +32,8 @@ class TtsAudioCache extends Model
     use HasTimestamps;
     use HasUuids;
 
+    protected $table = 'tts_audio_cache';
+
     protected $fillable = [
         'bot_id',
         'cache_key',

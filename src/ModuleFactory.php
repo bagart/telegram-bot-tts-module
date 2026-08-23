@@ -10,13 +10,14 @@ use BAGArt\TelegramBot\Processing\BotProcessorContext;
 use BAGArt\TelegramBotTts\Access\AccessService;
 use BAGArt\TelegramBotTts\Guard\ChatSemaphore;
 use BAGArt\TelegramBotTts\Guard\GlobalConcurrencyLimiter;
+use BAGArt\TelegramBotTts\Guard\GuardStoreContract;
 use BAGArt\TelegramBotTts\Guard\ProviderBreaker;
 use BAGArt\TelegramBotTts\Guard\QuotaCounter;
-use BAGArt\TelegramBotTts\Guard\RedisGuardStore;
 use BAGArt\TelegramBotTts\Guard\TtsMetrics;
 use BAGArt\TelegramBotTts\Media\FfmpegConverter;
 use BAGArt\TelegramBotTts\Media\MediaUploader;
 use BAGArt\TelegramBotTts\Processing\SpeechPipeline;
+use BAGArt\TelegramBotTts\Provider\AdapterSelectorContract;
 use BAGArt\TelegramBotTts\Provider\ConfigResolver;
 use BAGArt\TelegramBotTts\Provider\ProviderRegistry;
 use BAGArt\TelegramBotTts\Settings\TtsSettingsService;
@@ -57,7 +58,7 @@ final class ModuleFactory
         return new ProviderRegistry;
     }
 
-    public static function menu(): MenuRendere
+    public static function menu(): MenuRenderer
     {
         return new MenuRenderer(self::registry());
     }
@@ -67,12 +68,12 @@ final class ModuleFactory
         return new PendingInputService((int) config('tts.pending_input_ttl_seconds', 900));
     }
 
-    public static function guardStore(): RedisGuardStore
+    public static function guardStore(): GuardStoreContract
     {
-        return new RedisGuardStore;
+        return app(GuardStoreContract::class);
     }
 
-    public static function quotaCounter(): QuotaCounte
+    public static function quotaCounter(): QuotaCounter
     {
         return new QuotaCounter(self::guardStore());
     }
@@ -82,7 +83,7 @@ final class ModuleFactory
         return new ChatSemaphore(self::guardStore());
     }
 
-    public static function concurrencyLimiter(): GlobalConcurrencyLimite
+    public static function concurrencyLimiter(): GlobalConcurrencyLimiter
     {
         return new GlobalConcurrencyLimiter(
             self::guardStore(),
@@ -90,7 +91,7 @@ final class ModuleFactory
         );
     }
 
-    public static function breaker(): ProviderBreake
+    public static function breaker(): ProviderBreaker
     {
         return new ProviderBreaker(self::guardStore());
     }
@@ -107,22 +108,27 @@ final class ModuleFactory
         );
     }
 
-    public static function ffmpeg(): FfmpegConverte
+    public static function ffmpeg(): FfmpegConverter
     {
         return new FfmpegConverter;
     }
 
-    public static function recorder(): SynthesisRecorde
+    public static function recorder(): SynthesisRecorder
     {
         return new SynthesisRecorder;
     }
 
-    public static function configResolver(): ConfigResolve
+    public static function configResolver(): ConfigResolver
     {
         return new ConfigResolver(self::registry());
     }
 
-    public static function uploader(): MediaUploade
+    public static function adapterSelector(): AdapterSelectorContract
+    {
+        return app(AdapterSelectorContract::class);
+    }
+
+    public static function uploader(): MediaUploader
     {
         return new MediaUploader(self::concurrencyLimiter(), self::metrics());
     }
@@ -132,10 +138,20 @@ final class ModuleFactory
      */
     public static function pipeline(BotProcessorContext $context): SpeechPipeline
     {
+        return self::pipelineWithSender($context->tgSender);
+    }
+
+    /**
+     * Same pipeline with an explicit sender — used outside the webhook path
+     * (tests, future cron/CLI entry points).
+     */
+    public static function pipelineWithSender(TgSenderContract $sender): SpeechPipeline
+    {
         return new SpeechPipeline(
-            sender: $context->tgSender,
+            sender: $sender,
             settingsService: self::settings(),
             configResolver: self::configResolver(),
+            adapters: self::adapterSelector(),
             quota: self::quotaCounter(),
             chatSemaphore: self::chatSemaphore(),
             concurrency: self::concurrencyLimiter(),

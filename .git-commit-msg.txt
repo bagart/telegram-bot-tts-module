@@ -1,3 +1,0 @@
-fix: restore truncated identifiers and imports (TtsModuleDescriptor,
-ServiceProvider parent, TtsProviderContract DTO imports); add
-schedule_prune_enabled config gate
