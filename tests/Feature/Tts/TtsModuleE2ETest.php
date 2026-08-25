@@ -13,6 +13,7 @@ use BAGArt\TelegramBot\Http\Pure\TgApiResponse;
 use BAGArt\TelegramBot\Modules\TgCommandRegistry;
 use BAGArt\TelegramBot\Modules\TgModuleRegistry;
 use BAGArt\TelegramBot\Processing\RegisteredUpdateProcessorSelector;
+use BAGArt\TelegramBot\TgApi\Methods\DTO\SendAudioMethodDTO;
 use BAGArt\TelegramBot\TgApi\Methods\DTO\SendMessageMethodDTO;
 use BAGArt\TelegramBot\TgApi\Methods\DTO\SendVoiceMethodDTO;
 use BAGArt\TelegramBot\TgApi\Types\DTO\CallbackQueryTypeDTO;
@@ -32,6 +33,8 @@ use BAGArt\TelegramBotTts\Processing\VoiceCommandProcessor;
 use BAGArt\TelegramBotTts\Provider\AdapterSelectorContract;
 use BAGArt\TelegramBotTts\Provider\Dto\TtsRequest;
 use BAGArt\TelegramBotTts\Provider\Dto\TtsResult;
+use BAGArt\TelegramBotTts\Provider\ErrorCode;
+use BAGArt\TelegramBotTts\Provider\ProviderException;
 use BAGArt\TelegramBotTts\Provider\TtsProviderContract;
 use BAGArt\TelegramBotTts\Provider\VoiceCatalog;
 use BAGArt\TelegramBotTts\Provider\VoiceProviderConfig;
@@ -51,12 +54,11 @@ beforeEach(function () {
     config(['tts.superadmins' => []]);
     config(['tts.storage_path' => sys_get_temp_dir().'/tts-e2e-'.bin2hex(random_bytes(4))]);
 
-    $this->box = new class
-    {
+    $this->box = new class () {
         public int $calls = 0;
     };
 
-    $this->app->instance(GuardStoreContract::class, new ArrayGuardStore);
+    $this->app->instance(GuardStoreContract::class, new ArrayGuardStore());
     $this->app->instance(AdapterSelectorContract::class, ttsFakeSelector($this->box));
     $fakeClient = ttsFakeApiClient();
     TtsRecordingFakeApiClient::$uploaded = [];
@@ -86,19 +88,19 @@ afterEach(function () {
 
 function ttsFakeSelector(object $box): AdapterSelectorContract
 {
-    return new class($box) implements AdapterSelectorContract
-    {
+    return new class ($box) implements AdapterSelectorContract {
         public function __construct(
             private readonly object $box,
-        ) {}
+        ) {
+        }
 
         public function for(VoiceProviderConfig $config): TtsProviderContract
         {
-            return new class($this->box) implements TtsProviderContract
-            {
+            return new class ($this->box) implements TtsProviderContract {
                 public function __construct(
                     private readonly object $box,
-                ) {}
+                ) {
+                }
 
                 public function synthesize(TtsRequest $request): TtsResult
                 {
@@ -143,7 +145,7 @@ final class TtsRecordingFakeApiClient implements TgBotApiDTOClientContract
 
 function ttsFakeApiClient(): TgBotApiDTOClientContract
 {
-    return new TtsRecordingFakeApiClient;
+    return new TtsRecordingFakeApiClient();
 }
 
 function ttsBotConfig(): TgBotConfig
@@ -180,8 +182,7 @@ function ttsGroupMessage(int $userId, string $text, int $messageId = 10): Messag
 
 function ttsSenderSpy(): TgSenderContract
 {
-    return new class implements TgSenderContract
-    {
+    return new class () implements TgSenderContract {
         /** @var list<TgApiMethodDTOContract> */
         public array $sent = [];
 
@@ -402,8 +403,8 @@ it('toggles auto-speak from the panel callback verb through the selector', funct
     $update = new UpdateTypeDTO(updateId: 9, callbackQuery: $query);
 
     $selector = new RegisteredUpdateProcessorSelector(
-        serviceConfig: new TgServiceConfig,
-        botSetup: app(TgBotSetupFactory::class)->create(serviceConfig: new TgServiceConfig),
+        serviceConfig: new TgServiceConfig(),
+        botSetup: app(TgBotSetupFactory::class)->create(serviceConfig: new TgServiceConfig()),
         moduleEnablement: app(ModuleEnablementContract::class),
     );
 
@@ -502,4 +503,156 @@ it('falls back to manual voice input when the edge catalog is unreachable', func
 
     expect(ttsTexts($spy)[0])->toContain('голос')
         ->and(ModuleFactory::pending()->pop('test_bot', 777, 777)['action'])->toBe(PendingInputService::ACTION_VOICE);
+});
+
+function ttsWavSelector(object $box): AdapterSelectorContract
+{
+    return new class ($box) implements AdapterSelectorContract {
+        public function __construct(
+            private readonly object $box,
+        ) {
+        }
+
+        public function for(VoiceProviderConfig $config): TtsProviderContract
+        {
+            return new class ($this->box) implements TtsProviderContract {
+                public function __construct(
+                    private readonly object $box,
+                ) {
+                }
+
+                public function synthesize(TtsRequest $request): TtsResult
+                {
+                    $this->box->calls++;
+
+                    return new TtsResult(
+                        binary: str_repeat('RIFF', 128),
+                        mimeType: 'audio/wav',
+                        providerKey: $request->config->key,
+                        latencyMs: 42,
+                    );
+                }
+            };
+        }
+    };
+}
+
+/**
+ * A stub ffmpeg binary that "converts" by writing a marker payload to the
+ * target path (its last argument) and touching a marker file, so tests can
+ * prove the converter actually ran.
+ *
+ * @return array{string, string} [stubPath, markerPath]
+ */
+function ttsStubFfmpeg(): array
+{
+    $token = bin2hex(random_bytes(4));
+    $stubPath = sys_get_temp_dir().'/ffmpeg-stub-'.$token;
+    $markerPath = sys_get_temp_dir().'/ffmpeg-marker-'.$token;
+
+    file_put_contents($stubPath, sprintf(
+        "#!/usr/bin/env bash\nout=\"\${@: -1}\"\nprintf 'OggS-stub' > \"\$out\"\ntouch %s\n",
+        escapeshellarg($markerPath),
+    ));
+    chmod($stubPath, 0755);
+
+    return [$stubPath, $markerPath];
+}
+
+it('converts wav provider output through ffmpeg and delivers it as sendVoice (Kokoro branch)', function () {
+    [$stubPath, $markerPath] = ttsStubFfmpeg();
+    config(['tts.ffmpeg_path' => $stubPath]);
+    $this->app->instance(AdapterSelectorContract::class, ttsWavSelector($this->box));
+
+    try {
+        $spy = ttsSenderSpy();
+
+        ttsProcessorWithSender(VoiceCommandProcessor::class, $spy)
+            ->process(ttsPrivateMessage(777, '/voice wav через ffmpeg'), ttsBotConfig());
+
+        $uploads = ttsUploadRequests();
+        $convertedLocal = substr((string) $uploads[0]->voice, 7);
+
+        expect(ttsUploadMethodNames())->toBe(['sendVoice'])
+            ->and($uploads[0]->voice)->toStartWith('file://')
+            ->and($uploads[0]->voice)->toEndWith('.ogg')
+            ->and(is_file($markerPath))->toBeTrue()
+            ->and(is_file($convertedLocal))->toBeFalse();
+    } finally {
+        @unlink($stubPath);
+        @unlink($markerPath);
+    }
+});
+
+it('falls back to sendAudio for wav output when ffmpeg is unavailable (Kokoro no-ffmpeg branch)', function () {
+    config(['tts.ffmpeg_path' => sys_get_temp_dir().'/no-such-ffmpeg-'.bin2hex(random_bytes(4))]);
+    $this->app->instance(AdapterSelectorContract::class, ttsWavSelector($this->box));
+
+    $spy = ttsSenderSpy();
+
+    ttsProcessorWithSender(VoiceCommandProcessor::class, $spy)
+        ->process(ttsPrivateMessage(777, '/voice wav без ffmpeg'), ttsBotConfig());
+
+    $uploads = ttsUploadRequests();
+
+    expect(ttsUploadMethodNames())->toBe(['sendAudio'])
+        ->and($uploads[0])->toBeInstanceOf(SendAudioMethodDTO::class)
+        ->and($uploads[0]->audio)->toStartWith('file://')
+        ->and($this->box->calls)->toBe(1);
+});
+
+function ttsThrowingSelector(ErrorCode $code): AdapterSelectorContract
+{
+    return new class ($code) implements AdapterSelectorContract {
+        public function __construct(
+            private readonly ErrorCode $code,
+        ) {
+        }
+
+        public function for(VoiceProviderConfig $config): TtsProviderContract
+        {
+            return new class ($this->code) implements TtsProviderContract {
+                public function __construct(
+                    private readonly ErrorCode $code,
+                ) {
+                }
+
+                public function synthesize(TtsRequest $request): never
+                {
+                    throw new ProviderException($this->code, 'adapter exploded in test');
+                }
+            };
+        }
+    };
+}
+
+it('surfaces AUTH failures as the provider-key message in private chats (OpenAI paste/revoke)', function () {
+    $this->app->instance(AdapterSelectorContract::class, ttsThrowingSelector(ErrorCode::Auth));
+
+    $spy = ttsSenderSpy();
+
+    ttsProcessorWithSender(VoiceCommandProcessor::class, $spy)
+        ->process(ttsPrivateMessage(777, '/voice проверка ключа'), ttsBotConfig());
+
+    expect(ttsUploadRequests())->toBe([])
+        ->and(ttsTexts($spy)[0])->toContain('отклонил ключ');
+});
+
+it('honors the silent and emoji error modes when the provider fails', function () {
+    $this->app->instance(AdapterSelectorContract::class, ttsThrowingSelector(ErrorCode::Auth));
+
+    ModuleFactory::settings()->patch('test_bot', 777, ['on_error' => 'silent']);
+    $silentSpy = ttsSenderSpy();
+
+    ttsProcessorWithSender(VoiceCommandProcessor::class, $silentSpy)
+        ->process(ttsPrivateMessage(777, '/voice тихий режим'), ttsBotConfig());
+
+    ModuleFactory::settings()->patch('test_bot', 777, ['on_error' => 'emoji']);
+    $emojiSpy = ttsSenderSpy();
+
+    ttsProcessorWithSender(VoiceCommandProcessor::class, $emojiSpy)
+        ->process(ttsPrivateMessage(777, '/voice режим эмодзи'), ttsBotConfig());
+
+    expect(ttsTexts($silentSpy))->toBe([])
+        ->and(ttsTexts($emojiSpy))->toBe(['😕']);
 });
