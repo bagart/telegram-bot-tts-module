@@ -10,9 +10,11 @@ use BAGArt\TelegramBot\Contracts\Modules\ModuleEnablementContract;
 use BAGArt\TelegramBot\Contracts\Outbound\TgSenderContract;
 use BAGArt\TelegramBot\Contracts\TgApi\TgApiMethodDTOContract;
 use BAGArt\TelegramBot\Http\Pure\TgApiResponse;
+use BAGArt\TelegramBot\Modules\TgCommandRegistry;
+use BAGArt\TelegramBot\Modules\TgModuleRegistry;
 use BAGArt\TelegramBot\Processing\RegisteredUpdateProcessorSelector;
-use BAGArt\TelegramBot\TgApi\Methods\DTO\SendVoiceMethodDTO;
 use BAGArt\TelegramBot\TgApi\Methods\DTO\SendMessageMethodDTO;
+use BAGArt\TelegramBot\TgApi\Methods\DTO\SendVoiceMethodDTO;
 use BAGArt\TelegramBot\TgApi\Types\DTO\CallbackQueryTypeDTO;
 use BAGArt\TelegramBot\TgApi\Types\DTO\ChatTypeDTO;
 use BAGArt\TelegramBot\TgApi\Types\DTO\MessageTypeDTO;
@@ -20,8 +22,7 @@ use BAGArt\TelegramBot\TgApi\Types\DTO\UpdateTypeDTO;
 use BAGArt\TelegramBot\TgApi\Types\DTO\UserTypeDTO;
 use BAGArt\TelegramBot\TgApi\Types\Enum\ChatPropTypeEnum;
 use BAGArt\TelegramBot\TgBotSetupFactory;
-use BAGArt\TelegramBot\Modules\TgCommandRegistry;
-use BAGArt\TelegramBot\Modules\TgModuleRegistry;
+use BAGArt\TelegramBotManagement\Models\TgBot;
 use BAGArt\TelegramBotTts\Guard\ArrayGuardStore;
 use BAGArt\TelegramBotTts\Guard\GuardStoreContract;
 use BAGArt\TelegramBotTts\ModuleFactory;
@@ -50,17 +51,18 @@ beforeEach(function () {
     config(['tts.superadmins' => []]);
     config(['tts.storage_path' => sys_get_temp_dir().'/tts-e2e-'.bin2hex(random_bytes(4))]);
 
-    $this->box = new class () {
+    $this->box = new class
+    {
         public int $calls = 0;
     };
 
-    $this->app->instance(GuardStoreContract::class, new ArrayGuardStore());
+    $this->app->instance(GuardStoreContract::class, new ArrayGuardStore);
     $this->app->instance(AdapterSelectorContract::class, ttsFakeSelector($this->box));
     $fakeClient = ttsFakeApiClient();
     TtsRecordingFakeApiClient::$uploaded = [];
     $this->app->instance(TgBotApiDTOClientContract::class, $fakeClient);
 
-    BAGArt\TelegramBotManagement\Models\TgBot::create(['bot_id' => 'test_bot', 'token' => '123:test']);
+    TgBot::create(['bot_id' => 'test_bot', 'token' => '123:test']);
 
     Http::fake([
         'api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 1]], 200),
@@ -84,19 +86,19 @@ afterEach(function () {
 
 function ttsFakeSelector(object $box): AdapterSelectorContract
 {
-    return new class ($box) implements AdapterSelectorContract {
+    return new class($box) implements AdapterSelectorContract
+    {
         public function __construct(
             private readonly object $box,
-        ) {
-        }
+        ) {}
 
         public function for(VoiceProviderConfig $config): TtsProviderContract
         {
-            return new class ($this->box) implements TtsProviderContract {
+            return new class($this->box) implements TtsProviderContract
+            {
                 public function __construct(
                     private readonly object $box,
-                ) {
-                }
+                ) {}
 
                 public function synthesize(TtsRequest $request): TtsResult
                 {
@@ -141,7 +143,7 @@ final class TtsRecordingFakeApiClient implements TgBotApiDTOClientContract
 
 function ttsFakeApiClient(): TgBotApiDTOClientContract
 {
-    return new TtsRecordingFakeApiClient();
+    return new TtsRecordingFakeApiClient;
 }
 
 function ttsBotConfig(): TgBotConfig
@@ -178,7 +180,8 @@ function ttsGroupMessage(int $userId, string $text, int $messageId = 10): Messag
 
 function ttsSenderSpy(): TgSenderContract
 {
-    return new class () implements TgSenderContract {
+    return new class implements TgSenderContract
+    {
         /** @var list<TgApiMethodDTOContract> */
         public array $sent = [];
 
@@ -261,6 +264,48 @@ it('speaks /voice in a private chat and uploads a voice note (US1)', function ()
         ->and($uploads[0])->toBeInstanceOf(SendVoiceMethodDTO::class)
         ->and($uploads[0]->voice)->toStartWith('file://')
         ->and(is_file(substr((string) $uploads[0]->voice, 7)))->toBeTrue();
+});
+
+it('speaks the replied-to text when bare /voice is a reply (US1)', function () {
+    $spy = ttsSenderSpy();
+
+    $repliedText = 'Реплай на это сообщение должен быть озвучен';
+    $message = new MessageTypeDTO(
+        messageId: 21,
+        date: time(),
+        chat: new ChatTypeDTO(id: '777', type: ChatPropTypeEnum::PRIVATE),
+        from: ttsUser(777),
+        text: '/voice',
+        replyToMessage: ttsPrivateMessage(777, $repliedText, messageId: 20),
+    );
+
+    ttsProcessorWithSender(VoiceCommandProcessor::class, $spy)->process($message, ttsBotConfig());
+
+    expect(ttsUploadMethodNames())->toBe(['sendVoice']);
+});
+
+it('opens the panel for bare /voice even when the reply target has no text', function () {
+    $spy = ttsSenderSpy();
+
+    $replied = new MessageTypeDTO(
+        messageId: 31,
+        date: time(),
+        chat: new ChatTypeDTO(id: '777', type: ChatPropTypeEnum::PRIVATE),
+        from: ttsUser(777),
+    );
+    $message = new MessageTypeDTO(
+        messageId: 32,
+        date: time(),
+        chat: new ChatTypeDTO(id: '777', type: ChatPropTypeEnum::PRIVATE),
+        from: ttsUser(777),
+        text: '/voice',
+        replyToMessage: $replied,
+    );
+
+    ttsProcessorWithSender(VoiceCommandProcessor::class, $spy)->process($message, ttsBotConfig());
+
+    expect(ttsUploadMethodNames())->toBe([])
+        ->and(ttsTexts($spy)[0])->toContain('🎙');
 });
 
 it('serves repeated identical /voice from cache without provider calls', function () {
@@ -357,8 +402,8 @@ it('toggles auto-speak from the panel callback verb through the selector', funct
     $update = new UpdateTypeDTO(updateId: 9, callbackQuery: $query);
 
     $selector = new RegisteredUpdateProcessorSelector(
-        serviceConfig: new TgServiceConfig(),
-        botSetup: app(TgBotSetupFactory::class)->create(serviceConfig: new TgServiceConfig()),
+        serviceConfig: new TgServiceConfig,
+        botSetup: app(TgBotSetupFactory::class)->create(serviceConfig: new TgServiceConfig),
         moduleEnablement: app(ModuleEnablementContract::class),
     );
 
