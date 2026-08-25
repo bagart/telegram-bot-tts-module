@@ -55,13 +55,6 @@
             "BAGArt\\TelegramBotTts\\Tests\\": "tests/"
         }
     },
-    "extra": {
-        "laravel": {
-            "providers": [
-                "BAGArt\\TelegramBotTts\\TelegramBotTtsServiceProvider"
-            ]
-        }
-    },
     "scripts": {
         "test": "composer exec pest",
         "lint": "pint --dirty"

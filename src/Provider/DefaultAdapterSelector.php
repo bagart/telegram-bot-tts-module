@@ -15,8 +15,8 @@ final class DefaultAdapterSelector implements AdapterSelectorContract
     public function for(VoiceProviderConfig $config): TtsProviderContract
     {
         return match ($config->apiStyle) {
-            TtsApiStyle::EdgeTts => new EdgeTts,
-            TtsApiStyle::OpenaiTts => new OpenAiCompatibleTts,
+            TtsApiStyle::EdgeTts => new EdgeTts(),
+            TtsApiStyle::OpenaiTts => new OpenAiCompatibleTts(),
         };
     }
 }

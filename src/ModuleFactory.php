@@ -20,6 +20,7 @@ use BAGArt\TelegramBotTts\Processing\SpeechPipeline;
 use BAGArt\TelegramBotTts\Provider\AdapterSelectorContract;
 use BAGArt\TelegramBotTts\Provider\ConfigResolver;
 use BAGArt\TelegramBotTts\Provider\ProviderRegistry;
+use BAGArt\TelegramBotTts\Provider\VoiceCatalog;
 use BAGArt\TelegramBotTts\Settings\TtsSettingsService;
 use BAGArt\TelegramBotTts\Support\AudioFileStore;
 use BAGArt\TelegramBotTts\Support\SynthesisRecorder;
@@ -55,7 +56,7 @@ final class ModuleFactory
 
     public static function registry(): ProviderRegistry
     {
-        return new ProviderRegistry;
+        return new ProviderRegistry();
     }
 
     public static function menu(): MenuRenderer
@@ -110,17 +111,22 @@ final class ModuleFactory
 
     public static function ffmpeg(): FfmpegConverter
     {
-        return new FfmpegConverter;
+        return new FfmpegConverter();
     }
 
     public static function recorder(): SynthesisRecorder
     {
-        return new SynthesisRecorder;
+        return new SynthesisRecorder();
     }
 
     public static function configResolver(): ConfigResolver
     {
         return new ConfigResolver(self::registry());
+    }
+
+    public static function voiceCatalog(): VoiceCatalog
+    {
+        return new VoiceCatalog(self::registry());
     }
 
     public static function adapterSelector(): AdapterSelectorContract
@@ -130,7 +136,11 @@ final class ModuleFactory
 
     public static function uploader(): MediaUploader
     {
-        return new MediaUploader(self::concurrencyLimiter(), self::metrics());
+        return new MediaUploader(
+            self::concurrencyLimiter(),
+            self::metrics(),
+            app(TgBotApiDTOClientContract::class),
+        );
     }
 
     /**

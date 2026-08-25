@@ -56,7 +56,8 @@ class SpeechPipeline
         private readonly FfmpegConverter $ffmpeg,
         private readonly MediaUploader $uploader,
         private readonly int $budgetSeconds,
-    ) {}
+    ) {
+    }
 
     /**
      * @param  string  $trigger  'command' | 'auto'
@@ -162,7 +163,7 @@ class SpeechPipeline
             }
 
             // 9 upload with mime branching (voice / convert / audio)
-            $this->deliverVoiceOrAudio($botConfig->token, $chatId, $tmpPath, $result->mimeType, $settings->captionFor($text));
+            $this->deliverVoiceOrAudio($botConfig, $chatId, $tmpPath, $result->mimeType, $settings->captionFor($text));
             $tmpPath = null;
         } catch (ProviderException $e) {
             $this->metrics->recordSynthesis($botId, $config->key, $e->errorCode->value);
@@ -208,7 +209,7 @@ class SpeechPipeline
             return false;
         }
 
-        $this->deliverVoiceOrAudio($botConfig->token, $chatId, $path, $row->mime, $settings->captionFor($text));
+        $this->deliverVoiceOrAudio($botConfig, $chatId, $path, $row->mime, $settings->captionFor($text));
 
         return true;
     }
@@ -219,7 +220,7 @@ class SpeechPipeline
      * SendAudio.
      */
     private function deliverVoiceOrAudio(
-        string $botToken,
+        TgBotConfig $botConfig,
         int $chatId,
         string $path,
         string $mimeType,
@@ -228,7 +229,7 @@ class SpeechPipeline
         $delivery = MimePolicy::deliveryFor($mimeType);
 
         if ($delivery === VoiceDelivery::Voice) {
-            $this->uploader->sendVoiceOrAudio($botToken, $chatId, $path, $mimeType, $caption, asVoice: true);
+            $this->uploader->sendVoiceOrAudio($botConfig, $chatId, $path, $mimeType, $caption, asVoice: true);
 
             return;
         }
@@ -237,7 +238,7 @@ class SpeechPipeline
             $converted = $this->ffmpeg->convertToOggOpus($path);
 
             try {
-                $this->uploader->sendVoiceOrAudio($botToken, $chatId, $converted, 'audio/ogg', $caption, asVoice: true);
+                $this->uploader->sendVoiceOrAudio($botConfig, $chatId, $converted, 'audio/ogg', $caption, asVoice: true);
 
                 return;
             } finally {
@@ -245,7 +246,7 @@ class SpeechPipeline
             }
         }
 
-        $this->uploader->sendVoiceOrAudio($botToken, $chatId, $path, $mimeType, $caption, asVoice: false);
+        $this->uploader->sendVoiceOrAudio($botConfig, $chatId, $path, $mimeType, $caption, asVoice: false);
     }
 
     /**

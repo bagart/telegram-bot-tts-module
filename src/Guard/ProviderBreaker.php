@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace BAGArt\TelegramBotTts\Guard;
 
 use RuntimeException;
+use Throwable;
 
 /**
  * Per-provider circuit breaker (§9):
@@ -39,7 +40,8 @@ class ProviderBreaker
 
     public function __construct(
         private readonly GuardStoreContract $store,
-    ) {}
+    ) {
+    }
 
     /** @return bool true = call may proceed */
     public function canPass(string $providerKey): bool
@@ -67,8 +69,14 @@ class ProviderBreaker
                 self::PROBE_LOCK_TTL_MILLISECONDS,
             );
         } catch (RuntimeException $e) {
+            // Best-effort telemetry: outside a booted app (pure unit runs)
+            // the ExceptionHandler binding does not exist — never let
+            // reporting break the fail-open guarantee.
             if (\function_exists('report')) {
-                report($e);
+                try {
+                    report($e);
+                } catch (Throwable) {
+                }
             }
 
             return true;

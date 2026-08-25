@@ -32,7 +32,8 @@ class PendingInputService
 
     public function __construct(
         private readonly int $ttlSeconds = self::TTL_SECONDS,
-    ) {}
+    ) {
+    }
 
     /**
      * @param  array<string, mixed>  $payload  small context (e.g. provider_key)

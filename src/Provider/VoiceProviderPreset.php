@@ -19,5 +19,6 @@ final readonly class VoiceProviderPreset
         public ?string $model = null,
         public ?string $voice = null,
         public ?string $note = null,
-    ) {}
+    ) {
+    }
 }

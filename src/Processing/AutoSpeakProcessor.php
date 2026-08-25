@@ -38,7 +38,8 @@ class AutoSpeakProcessor implements TgModuleProcessorContract
         private readonly PendingInputService $pending,
         private readonly SpeechPipeline $pipeline,
         private readonly ProviderRegistry $registry,
-    ) {}
+    ) {
+    }
 
     public static function moduleId(): string
     {
@@ -185,5 +186,7 @@ class AutoSpeakProcessor implements TgModuleProcessorContract
         ));
     }
 
-    public function onException(ProcessorErrorContext $context): void {}
+    public function onException(ProcessorErrorContext $context): void
+    {
+    }
 }

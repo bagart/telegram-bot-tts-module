@@ -16,5 +16,6 @@ final readonly class TtsResult
         public string $mimeType,
         public string $providerKey,
         public int $latencyMs,
-    ) {}
+    ) {
+    }
 }

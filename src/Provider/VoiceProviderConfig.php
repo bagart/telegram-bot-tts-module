@@ -21,5 +21,6 @@ final readonly class VoiceProviderConfig
         public int $connectTimeoutSec = 10,
         public int $timeoutSec = 25,
         public int $maxResponseBytes = 8388608,
-    ) {}
+    ) {
+    }
 }

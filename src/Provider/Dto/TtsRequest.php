@@ -17,5 +17,6 @@ final readonly class TtsRequest
         public VoiceProviderConfig $config,
         public ?string $voice = null,
         public ?string $languageHint = null,
-    ) {}
+    ) {
+    }
 }

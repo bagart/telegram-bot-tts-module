@@ -10,27 +10,37 @@ use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 
 /**
- * Track A fence (RFC §6): the JSON-only transport bypass lives in exactly
- * one class. If any other src/ file starts posting to api.telegram.org o
- * referencing the send-voice/upload path directly, CI fails here.
+ * Standard-transport anti-regression (Track B, todo.tts.md §6): the former
+ * Track A bypass (direct multipart posts to api.telegram.org) is deleted.
+ * Voice delivery must go through the core DTO client — if any src/ file
+ * starts referencing the raw upload path again, CI fails here.
  */
 final class TrackAFenceTest extends TestCase
 {
-    public function test_multipart_bypass_is_fenced_inside_media_uploader(): void
+    public function test_no_src_file_posts_to_telegram_api_directly(): void
     {
         $srcDir = dirname(__DIR__, 2).'/src';
         $offenders = [];
 
         foreach ($this->phpFiles($srcDir) as $file) {
-            if (in_array(basename($file), ['MediaUploader.php', 'TtsDoctorCommand.php'], true)) {
-                // MediaUploader = the fence itself; TtsDoctorCommand = the
-                // runtime detector running the same scan in production.
+            // TtsDoctorCommand runs the same scan at runtime and necessarily
+            // contains the needle literals.
+            if (basename($file) === 'TtsDoctorCommand.php') {
                 continue;
             }
 
             $contents = (string) file_get_contents($file);
 
-            foreach (['api.telegram.org', "'sendVoice'", '"sendVoice"', 'Http::attach'] as $needle) {
+            foreach ([
+                // Direct Telegram API posting markers (provider HTTP calls
+                // are fine — only api.telegram.org access is fenced).
+                'api.telegram.org',
+                'Http::attach',
+                "'sendVoice'",
+                '"sendVoice"',
+                "'sendAudio'",
+                '"sendAudio"',
+            ] as $needle) {
                 if (str_contains($contents, $needle)) {
                     $offenders[] = basename($file).' contains '.$needle;
 
@@ -39,16 +49,17 @@ final class TrackAFenceTest extends TestCase
             }
         }
 
-        self::assertSame([], $offenders, 'Track A bypass leaked out of MediaUploader');
+        self::assertSame([], $offenders, 'Direct Telegram API access reappeared in module src/');
     }
 
-    public function test_media_uploader_documents_the_fence(): void
+    public function test_media_uploader_uses_the_core_dto_client(): void
     {
         $doc = (string) file_get_contents(dirname(__DIR__, 2).'/src/Media/MediaUploader.php');
 
-        self::assertStringContainsString('TRACK A', $doc);
-        self::assertStringContainsString('TRACK B', $doc);
-        self::assertStringContainsString('ASKHttpRequest', $doc);
+        self::assertStringContainsString('TgBotApiDTOClientContract', $doc);
+        self::assertStringContainsString('SendVoiceMethodDTO', $doc);
+        self::assertStringContainsString('file://', $doc);
+        self::assertStringNotContainsString('Http::', $doc);
     }
 
     /**

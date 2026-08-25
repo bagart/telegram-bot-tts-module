@@ -48,7 +48,8 @@ final readonly class TtsSettings
         public string $locale = self::LOCALE_RU,
         public bool $noticeShown = false,
         public ?array $customProvider = null,
-    ) {}
+    ) {
+    }
 
     /**
      * @param  array<string, mixed>  $raw

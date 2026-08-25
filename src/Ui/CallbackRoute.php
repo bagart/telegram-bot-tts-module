@@ -28,6 +28,8 @@ final class CallbackRoute
 
     public const VERB_VOICE_INPUT = 'voc';
 
+    public const VERB_VOICE_MANUAL = 'vman';
+
     public const VERB_SET_VOICE = 'svoc';
 
     public const VERB_CAPTION = 'cap';
@@ -45,6 +47,7 @@ final class CallbackRoute
         self::VERB_SET_PROVIDER,
         self::VERB_CUSTOM_PROVIDER,
         self::VERB_VOICE_INPUT,
+        self::VERB_VOICE_MANUAL,
         self::VERB_SET_VOICE,
         self::VERB_CAPTION,
         self::VERB_ERROR_MODE,

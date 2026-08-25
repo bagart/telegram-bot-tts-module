@@ -16,8 +16,10 @@ use BAGArt\TelegramBot\TgApi\Methods\DTO\SendMessageMethodDTO;
 use BAGArt\TelegramBot\TgApi\Types\DTO\CallbackQueryTypeDTO;
 use BAGArt\TelegramBotTts\Access\AccessService;
 use BAGArt\TelegramBotTts\I18n\Strings;
+use BAGArt\TelegramBotTts\Models\TtsToken;
 use BAGArt\TelegramBotTts\ModuleFactory;
 use BAGArt\TelegramBotTts\Provider\ProviderRegistry;
+use BAGArt\TelegramBotTts\Provider\VoiceCatalog;
 use BAGArt\TelegramBotTts\Settings\TtsSettingsService;
 use BAGArt\TelegramBotTts\Ui\CallbackRoute;
 use BAGArt\TelegramBotTts\Ui\MenuRenderer;
@@ -41,7 +43,9 @@ class MenuProcessor implements TgModuleProcessorContract
         private readonly MenuRenderer $menu,
         private readonly PendingInputService $pending,
         private readonly ProviderRegistry $registry,
-    ) {}
+        private readonly VoiceCatalog $voiceCatalog,
+    ) {
+    }
 
     public static function moduleId(): string
     {
@@ -58,6 +62,7 @@ class MenuProcessor implements TgModuleProcessorContract
             menu: ModuleFactory::menu(),
             pending: ModuleFactory::pending(),
             registry: ModuleFactory::registry(),
+            voiceCatalog: ModuleFactory::voiceCatalog(),
         );
     }
 
@@ -169,12 +174,12 @@ class MenuProcessor implements TgModuleProcessorContract
                 return;
 
             case CallbackRoute::VERB_VOICE_INPUT:
-                $this->pending->start($botId, $chatId, $userTgId, PendingInputService::ACTION_VOICE);
-                $this->sender->send($botConfig, new SendMessageMethodDTO(
-                    chatId: (string) $chatId,
-                    text: Strings::get($locale, 'input.ask_voice'),
-                ));
-                $this->answer($botConfig, $query);
+                $this->openVoicePicker($query, $botConfig, $chatId);
+
+                return;
+
+            case CallbackRoute::VERB_VOICE_MANUAL:
+                $this->startVoiceManualInput($query, $botConfig, $chatId, (int) $query->from->id);
 
                 return;
 
@@ -218,6 +223,49 @@ class MenuProcessor implements TgModuleProcessorContract
         }
 
         $this->answer($botConfig, $query, 'Unknown action', alert: true);
+    }
+
+    /**
+     * Voice picker (Q2): preset catalog when ≤ limit; falls back to the
+     * manual text-input flow when the catalog is unavailable or oversized.
+     */
+    private function openVoicePicker(
+        CallbackQueryTypeDTO $query,
+        TgBotConfig $botConfig,
+        int $chatId,
+    ): void {
+        $botId = (string) $botConfig->botId;
+        $settings = $this->settings->get($botId, $chatId);
+        $page = $this->menu->voices($chatId, $settings, $this->voiceCatalog->for($settings));
+
+        if ($page['keyboard'] === null) {
+            $this->startVoiceManualInput($query, $botConfig, $chatId, (int) $query->from->id);
+
+            return;
+        }
+
+        $this->sendPage($botConfig, $chatId, $page);
+        $this->answer($botConfig, $query);
+    }
+
+    /**
+     * @param  array{text: string, keyboard: mixed}  $page
+     */
+    private function startVoiceManualInput(
+        CallbackQueryTypeDTO $query,
+        TgBotConfig $botConfig,
+        int $chatId,
+        int $userTgId,
+    ): void {
+        $botId = (string) $botConfig->botId;
+        $started = $this->pending->start($botId, $chatId, $userTgId, PendingInputService::ACTION_VOICE);
+
+        $this->sender->send($botConfig, new SendMessageMethodDTO(
+            chatId: (string) $chatId,
+            text: Strings::get($this->settings->get($botId, $chatId)->locale, 'input.ask_voice')
+                .($started ? '' : "\n\n(input storage unavailable — try later)"),
+        ));
+        $this->answer($botConfig, $query);
     }
 
     private function selectProvider(
@@ -305,5 +353,7 @@ class MenuProcessor implements TgModuleProcessorContract
         }
     }
 
-    public function onException(ProcessorErrorContext $context): void {}
+    public function onException(ProcessorErrorContext $context): void
+    {
+    }
 }

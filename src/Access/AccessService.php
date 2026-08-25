@@ -28,7 +28,8 @@ class AccessService
 
     public function __construct(
         private readonly TgBotApiDTOClientContract $api,
-    ) {}
+    ) {
+    }
 
     public function isSuperadmin(int|string $userTgId): bool
     {

@@ -16,7 +16,8 @@ class ConfigResolver
 {
     public function __construct(
         private readonly ProviderRegistry $registry,
-    ) {}
+    ) {
+    }
 
     public function resolve(string $botId, TtsSettings $settings): VoiceProviderConfig
     {

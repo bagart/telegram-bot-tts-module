@@ -75,8 +75,8 @@ class TtsBenchCommand extends Command
         }
 
         $adapter = match ($config->apiStyle) {
-            TtsApiStyle::EdgeTts => new EdgeTts,
-            TtsApiStyle::OpenaiTts => new OpenAiCompatibleTts,
+            TtsApiStyle::EdgeTts => new EdgeTts(),
+            TtsApiStyle::OpenaiTts => new OpenAiCompatibleTts(),
         };
 
         $text = (string) ($this->option('text') ?: 'Проверка задержки синтеза речи, benchmark sample 123.');

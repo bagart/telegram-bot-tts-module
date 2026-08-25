@@ -17,7 +17,8 @@ class QuotaCounter
 
     public function __construct(
         private readonly GuardStoreContract $store,
-    ) {}
+    ) {
+    }
 
     /**
      * @return bool true = allowed; false = quota exhausted OR guard store

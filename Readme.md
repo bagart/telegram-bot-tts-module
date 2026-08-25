@@ -11,13 +11,17 @@ for private chats. RFC: `docs/tasks/todo.tts.md`.
 
 ## Installation (host app)
 
+Dev mode (this monorepo): wired via root PSR-4 mapping + path repository;
+provider listed in `bootstrap/providers.php` — no `composer require` needed.
+
 ```bash
-# composer.json: add path repository misc/BAGArt/telegram-bot-tts-module, then:
-composer require bagart/telegram-bot-tts-module:@dev
 php artisan migrate
 # schedule in routes/console.php:
 #   $schedule->command('tts:prune')->daily()->withoutOverlapping();
 ```
+
+Prod mode (servers): `cmd/deps/install --mode=prod` resolves
+`bagart/telegram-bot-tts-module` from VCS sources via `composer.prod.json`.
 
 ## Provider guide
 
@@ -44,19 +48,37 @@ services:
 
 The module speaks this documented contract; swap in any wrapper that matches it.
 
-## Track A fence
+## Voice delivery (Track B, current)
 
-The platform transport is JSON-only, so freshly synthesized audio is uploaded
-multipart **directly** by one fenced class (`src/Media/MediaUploader.php`),
-bypassing queue/rate-limiter/DLQ on purpose. It enforces its own discipline:
-global upload semaphore, single attempt + one transport retry, 429 honoring,
-metrics. A grep-guard test (`tests/Guard/TrackAFenceTest.php`) fails CI if the
-bypass leaks. Track B (multipart support in the core client) will replace it.
+Voice notes travel through the **standard transport**: `MediaUploader` builds
+a `SendVoiceMethodDTO`/`SendAudioMethodDTO` whose media field carries the
+synthesized tmpfile as a `file://` path; the core client
+(`TgBotApiDTOClient`) splits that field into `ASKHttpRequest::$files` at the
+send point and the transport uploads it as multipart/form-data. The uploader
+keeps its own discipline: global upload semaphore shared with the synthesis
+budget, single attempt + one transient retry, 429 Retry-After honoring,
+metrics. An anti-regression test (`tests/Guard/TrackAFenceTest.php`) fails CI
+if direct api.telegram.org access reappears in module src/.
+
+History: before Track B landed, delivery bypassed the core client entirely
+("Track A" fenced multipart via Laravel Http) because the platform transport
+was JSON-only.
+
+## Bench baseline
+
+`tts:bench --bot=… --count=10` (no Telegram upload). Record p50/p95 here per provider:
+
+| Provider | Date | n | p50 | p95 | ok% |
+|---|---|---|---|---|---|
+| edge-tts | 2026-08-24 | 10 | 580 ms | 2149 ms | 100% |
+
+SLO gate (todo.tts.md §7): ≥97% ok, p95 ≤25 s.
 
 ## Manual QA checklist
 
 - [ ] edge-tts wrapper reachable at `TTS_EDGE_TTS_BASE_URL`; `/voice тест` returns an OGG voice note
 - [ ] repeat `/voice тест` makes zero provider calls (cache hit)
+- [ ] `/voice` → Голос: picker lists locale voices (edge) or the static catalog (OpenAI-dialect); «Ввести вручную» falls back to text input
 - [ ] Kokoro container: wav response → ffmpeg converts (or falls back to SendAudio without ffmpeg)
 - [ ] OpenAI preset: paste token → speak → revoke key → AUTH failure text shown
 - [ ] quota: lower `daily_quota`, exceed it → refusal text, `tts:qblocked` counter grows

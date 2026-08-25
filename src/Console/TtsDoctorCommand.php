@@ -122,8 +122,10 @@ class TtsDoctorCommand extends Command
     }
 
     /**
-     * Grep-guard: only MediaUploader may reference the Telegram upload
-     * methods; any other src/ class referencing them is a fence breach.
+     * Grep-guard (Track B): no src/ class may reference Telegram send-voice
+     * upload literals — delivery goes through the core DTO client, which
+     * splits `file://` media fields into the transport's multipart body.
+     * Provider HTTP calls are unaffected.
      *
      * @return list<string> offending class names
      */
@@ -140,13 +142,18 @@ class TtsDoctorCommand extends Command
                 continue;
             }
 
-            if ($file->getBasename() === 'MediaUploader.php') {
+            // This command contains the needle literals themselves.
+            if ($file->getBasename() === basename(__FILE__)) {
                 continue;
             }
 
             $contents = (string) file_get_contents($file->getPathname());
 
-            if (str_contains($contents, "'sendVoice'") || str_contains($contents, '"sendVoice"')) {
+            if (str_contains($contents, "'sendVoice'")
+                || str_contains($contents, '"sendVoice"')
+                || str_contains($contents, 'api.telegram.org')
+                || str_contains($contents, 'Http::attach')
+            ) {
                 $offenders[] = $file->getBasename();
             }
         }

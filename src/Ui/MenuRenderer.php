@@ -20,7 +20,8 @@ class MenuRenderer
 
     public function __construct(
         private readonly ProviderRegistry $registry,
-    ) {}
+    ) {
+    }
 
     /**
      * @return array{text: string, keyboard: InlineKeyboardMarkupTypeDTO}
@@ -162,6 +163,20 @@ class MenuRenderer
         if ($row !== []) {
             $rows[] = $row;
         }
+
+        $rows[] = [
+            new InlineKeyboardButtonTypeDTO(
+                text: '✏️ '.$t('panel.voice_manual'),
+                callbackData: CallbackRoute::encode($chatId, CallbackRoute::VERB_VOICE_MANUAL),
+            ),
+        ];
+
+        $rows[] = [
+            new InlineKeyboardButtonTypeDTO(
+                text: '← '.$t('panel.title'),
+                callbackData: CallbackRoute::encode($chatId, CallbackRoute::VERB_MENU),
+            ),
+        ];
 
         return [
             'text' => $t('panel.voice'),

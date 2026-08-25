@@ -15,7 +15,8 @@ class AudioFileStore
 {
     public function __construct(
         private readonly string $basePath,
-    ) {}
+    ) {
+    }
 
     public function path(string $botId, string $cacheKey, string $extension): string
     {

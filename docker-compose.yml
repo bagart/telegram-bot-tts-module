@@ -1,0 +1,22 @@
+# edge-tts wrapper for the TTS module (see Readme.md, "Provider guide").
+#
+#   docker compose up -d --build
+#   curl http://localhost:55000/v1/voices
+#
+# The wrapper is also attached to the platform dev network so app containers
+# resolve it by service name: TTS_EDGE_TTS_BASE_URL=http://edge-tts-http:55000
+services:
+  edge-tts-http:
+    build: ./docker/wrapper
+    image: bagart/edge-tts-wrapper:latest
+    restart: unless-stopped
+    ports:
+      - "55000:55000"
+    networks:
+      - default
+      - platform
+
+networks:
+  platform:
+    name: telegram-bot-platform_laravel-development
+    external: true

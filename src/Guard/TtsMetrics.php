@@ -17,7 +17,8 @@ class TtsMetrics
 
     public function __construct(
         private readonly GuardStoreContract $store,
-    ) {}
+    ) {
+    }
 
     public function recordSynthesis(string $botId, string $providerKey, string $status): void
     {

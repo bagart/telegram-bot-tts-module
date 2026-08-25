@@ -21,7 +21,7 @@ final class GuardsTest extends TestCase
 {
     public function test_quota_allows_up_to_the_daily_cap(): void
     {
-        $quota = new QuotaCounter(new ArrayGuardStore);
+        $quota = new QuotaCounter(new ArrayGuardStore());
 
         for ($i = 0; $i < 3; $i++) {
             self::assertTrue($quota->allow('bot1', 100, 3));
@@ -32,7 +32,7 @@ final class GuardsTest extends TestCase
 
     public function test_quota_zero_means_unlimited(): void
     {
-        $quota = new QuotaCounter(new ArrayGuardStore);
+        $quota = new QuotaCounter(new ArrayGuardStore());
 
         for ($i = 0; $i < 50; $i++) {
             self::assertTrue($quota->allow('bot1', 100, 0));
@@ -41,14 +41,14 @@ final class GuardsTest extends TestCase
 
     public function test_quota_is_fail_closed_when_store_is_down(): void
     {
-        $quota = new QuotaCounter(new ThrowingGuardStore);
+        $quota = new QuotaCounter(new ThrowingGuardStore());
 
         self::assertFalse($quota->allow('bot1', 100, 10));
     }
 
     public function test_quota_keys_are_per_bot_chat_and_day(): void
     {
-        $store = new ArrayGuardStore;
+        $store = new ArrayGuardStore();
         $quota = new QuotaCounter($store);
 
         self::assertTrue($quota->allow('botA', 1, 1));
@@ -59,7 +59,7 @@ final class GuardsTest extends TestCase
 
     public function test_chat_semaphore_is_exclusive_per_chat(): void
     {
-        $semaphore = new ChatSemaphore(new ArrayGuardStore);
+        $semaphore = new ChatSemaphore(new ArrayGuardStore());
 
         self::assertTrue($semaphore->acquire('bot1', 7));
         self::assertFalse($semaphore->acquire('bot1', 7));
@@ -71,14 +71,14 @@ final class GuardsTest extends TestCase
 
     public function test_chat_semaphore_is_fail_open_when_store_is_down(): void
     {
-        $semaphore = new ChatSemaphore(new ThrowingGuardStore);
+        $semaphore = new ChatSemaphore(new ThrowingGuardStore());
 
         self::assertTrue($semaphore->acquire('bot1', 7));
     }
 
     public function test_global_limiter_enforces_cap_and_self_heals(): void
     {
-        $limiter = new GlobalConcurrencyLimiter(new ArrayGuardStore, 2);
+        $limiter = new GlobalConcurrencyLimiter(new ArrayGuardStore(), 2);
 
         self::assertTrue($limiter->acquire());
         self::assertTrue($limiter->acquire());
@@ -90,14 +90,14 @@ final class GuardsTest extends TestCase
 
     public function test_global_limiter_is_fail_open_when_store_is_down(): void
     {
-        $limiter = new GlobalConcurrencyLimiter(new ThrowingGuardStore, 1);
+        $limiter = new GlobalConcurrencyLimiter(new ThrowingGuardStore(), 1);
 
         self::assertTrue($limiter->acquire());
     }
 
     public function test_breaker_stays_closed_below_threshold(): void
     {
-        $breaker = new ProviderBreaker(new ArrayGuardStore);
+        $breaker = new ProviderBreaker(new ArrayGuardStore());
 
         for ($i = 0; $i < 4; $i++) {
             self::assertTrue($breaker->canPass('edge-tts'));
@@ -109,7 +109,7 @@ final class GuardsTest extends TestCase
 
     public function test_breaker_opens_after_threshold_and_resets_on_success(): void
     {
-        $store = new ArrayGuardStore;
+        $store = new ArrayGuardStore();
         $breaker = new ProviderBreaker($store);
 
         for ($i = 0; $i < 5; $i++) {
@@ -137,7 +137,7 @@ final class GuardsTest extends TestCase
 
     public function test_successful_probe_closes_the_breaker(): void
     {
-        $store = new ArrayGuardStore;
+        $store = new ArrayGuardStore();
         $breaker = new ProviderBreaker($store);
 
         for ($i = 0; $i < 5; $i++) {
@@ -155,7 +155,7 @@ final class GuardsTest extends TestCase
 
     public function test_breaker_is_fail_open_when_store_is_down(): void
     {
-        $breaker = new ProviderBreaker(new ThrowingGuardStore);
+        $breaker = new ProviderBreaker(new ThrowingGuardStore());
 
         self::assertTrue($breaker->canPass('edge-tts'));
     }

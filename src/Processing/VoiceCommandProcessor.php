@@ -37,7 +37,8 @@ class VoiceCommandProcessor implements TgModuleProcessorContract
         private readonly AccessService $access,
         private readonly MenuRenderer $menu,
         private readonly SpeechPipeline $pipeline,
-    ) {}
+    ) {
+    }
 
     public static function moduleId(): string
     {
@@ -127,7 +128,9 @@ class VoiceCommandProcessor implements TgModuleProcessorContract
         }
     }
 
-    public function onException(ProcessorErrorContext $context): void {}
+    public function onException(ProcessorErrorContext $context): void
+    {
+    }
 
     /**
      * Text after the command token; a reply target's text when the command

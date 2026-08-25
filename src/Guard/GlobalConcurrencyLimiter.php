@@ -18,7 +18,8 @@ class GlobalConcurrencyLimiter
     public function __construct(
         private readonly GuardStoreContract $store,
         private readonly int $cap,
-    ) {}
+    ) {
+    }
 
     /** @return bool false = cap reached (or never when degraded). */
     public function acquire(): bool

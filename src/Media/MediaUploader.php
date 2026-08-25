@@ -4,37 +4,29 @@ declare(strict_types=1);
 
 namespace BAGArt\TelegramBotTts\Media;
 
+use BAGArt\TelegramBot\Configs\TgBotConfig;
+use BAGArt\TelegramBot\Contracts\ApiCommunication\TgBotApiDTOClientContract;
+use BAGArt\TelegramBot\Exceptions\ApiCommunication\TgApiNetworkException;
+use BAGArt\TelegramBot\Exceptions\ApiCommunication\TgApiRateLimitException;
+use BAGArt\TelegramBot\TgApi\Methods\DTO\SendAudioMethodDTO;
+use BAGArt\TelegramBot\TgApi\Methods\DTO\SendVoiceMethodDTO;
 use BAGArt\TelegramBotTts\Guard\GlobalConcurrencyLimiter;
 use BAGArt\TelegramBotTts\Guard\TtsMetrics;
-use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Sleep;
 use RuntimeException;
+use Throwable;
 
 /**
- * ============================================================================
- * TRACK A — FENCED BYPASS. DO NOT COPY THIS PATTERN ELSEWHERE.
- * ============================================================================
- * The platform transport is JSON-only (ASKHttpRequest has no files support,
- * see docs/tasks/todo.tts.md §6), so freshly synthesized audio cannot travel
- * through the outbound queue/pipeline. This class posts multipart/form-data
- * DIRECTLY to api.telegram.org, bypassing the queue, rate limiter and DLQ.
+ * Voice delivery through the standard transport (Track B, todo.tts.md §6).
  *
- * Accepted deliberately because:
- *  - volume is human-conversational and quota-capped at the source;
- *  - this uploader enforces its own discipline: global upload semaphore
- *    shared with the synthesis budget, single attempt + one retry on
- *    transport error, 429 Retry-After honoring (capped 30 s), metrics.
+ * Builds a SendVoice/SendAudio method DTO whose media field carries the
+ * synthesized tmpfile as a `file://` path; the core client splits it into
+ * ASKHttpRequest::$files at the send point and the transport uploads it as
+ * multipart/form-data. No direct HTTP posting happens in this module.
  *
- * The bypass MUST stay fenced inside this one class (grep-guarded by
- * tests/Guard/TrackAFenceTest.php): no other module code may reference
- * SendVoice/SendAudio upload paths or api.telegram.org directly.
- *
- * TRACK B (post-MVP core-lib upgrade) will add `array $files` to
- * ASKHttpRequest + transports; afterwards this class migrates onto
- * TgBotApiDTOClientContract and the fence is deleted.
- * ============================================================================
+ * Own discipline (kept from the former Track A bypass): global upload
+ * semaphore shared with the synthesis budget, single attempt + one retry on
+ * transient failures, 429 Retry-After honoring (capped 30 s), metrics.
  */
 class MediaUploader
 {
@@ -46,19 +38,19 @@ class MediaUploader
 
     private const UPLOAD_TIMEOUT_SECONDS = 8;
 
-    private const TELEGRAM_API_BASE = 'https://api.telegram.org';
-
     public function __construct(
         private readonly GlobalConcurrencyLimiter $concurrency,
         private readonly TtsMetrics $metrics,
-    ) {}
+        private readonly TgBotApiDTOClientContract $api,
+    ) {
+    }
 
     /**
      * Upload local audio file as a voice note (or audio document fallback)
      * to the chat. Throws on final failure; the caller owns the tmpfile.
      */
     public function sendVoiceOrAudio(
-        string $botToken,
+        TgBotConfig $botConfig,
         int $chatId,
         string $filePath,
         string $mimeType,
@@ -70,115 +62,86 @@ class MediaUploader
         }
 
         if (! $this->concurrency->acquire()) {
-            $this->metrics->recordUpload((string) explode(':', $botToken)[0], 'busy');
+            $this->metrics->recordUpload($botConfig->botId, 'busy');
 
             throw new RuntimeException('Upload concurrency cap reached');
         }
 
         try {
-            $this->uploadWithDiscipline($botToken, $chatId, $filePath, $mimeType, $caption, $asVoice);
+            $this->uploadWithDiscipline($botConfig, $chatId, $filePath, $mimeType, $caption, $asVoice);
         } finally {
             $this->concurrency->release();
         }
     }
 
     private function uploadWithDiscipline(
-        string $botToken,
+        TgBotConfig $botConfig,
         int $chatId,
         string $filePath,
         string $mimeType,
         ?string $caption,
         bool $asVoice,
     ): void {
-        $botId = explode(':', $botToken)[0];
         $attempt = 0;
 
         while (true) {
             $attempt++;
 
             try {
-                $this->postMultipart($botToken, $chatId, $filePath, $mimeType, $caption, $asVoice);
-                $this->metrics->recordUpload($botId, 'ok');
+                $this->requestDelivery($botConfig, $chatId, $filePath, $mimeType, $caption, $asVoice);
+                $this->metrics->recordUpload($botConfig->botId, 'ok');
 
                 return;
             } catch (RateLimitedAfter $e) {
                 if ($attempt >= self::MAX_ATTEMPTS) {
-                    $this->metrics->recordUpload($botId, 'rate_limited');
+                    $this->metrics->recordUpload($botConfig->botId, 'rate_limited');
                     $this->rethrow('Telegram rate limited the upload', $e);
                 }
 
                 Sleep::for(min($e->retryAfterSeconds, self::RETRY_AFTER_CAP_SECONDS))->seconds();
-            } catch (ConnectionException $e) {
+            } catch (TgApiNetworkException $e) {
                 if ($attempt >= self::MAX_ATTEMPTS) {
-                    $this->metrics->recordUpload($botId, 'transport_error');
+                    $this->metrics->recordUpload($botConfig->botId, 'transport_error');
                     $this->rethrow('Upload transport error', $e);
                 }
 
                 Sleep::for(self::RETRY_DELAY_MS)->milliseconds();
-            } catch (\Throwable $e) {
-                $this->metrics->recordUpload($botId, 'error');
+            } catch (Throwable $e) {
+                $this->metrics->recordUpload($botConfig->botId, 'error');
                 $this->rethrow('Upload failed', $e);
             }
         }
     }
 
-    private function postMultipart(
-        string $botToken,
+    private function requestDelivery(
+        TgBotConfig $botConfig,
         int $chatId,
         string $filePath,
         string $mimeType,
         ?string $caption,
         bool $asVoice,
     ): void {
-        $field = $asVoice ? 'voice' : 'audio';
-        $method = $asVoice ? 'sendVoice' : 'sendAudio';
-        $fileName = 'tts.'.MimePolicy::extensionFor($mimeType);
-        $handle = fopen($filePath, 'rb');
+        // The file:// scheme marks the field for the mapper's Track B split:
+        // it leaves the JSON body and travels as a multipart upload.
+        $media = 'file://'.$filePath;
+        $clampedCaption = ($caption !== null && $caption !== '') ? mb_substr($caption, 0, 1024) : null;
 
-        if ($handle === false) {
-            throw new RuntimeException('Cannot open audio tmpfile for upload');
-        }
+        $dto = $asVoice
+            ? new SendVoiceMethodDTO(chatId: (string) $chatId, voice: $media, caption: $clampedCaption)
+            : new SendAudioMethodDTO(chatId: (string) $chatId, audio: $media, caption: $clampedCaption);
 
         try {
-            $request = Http::baseUrl(self::TELEGRAM_API_BASE)
-                ->connectTimeout(10)
-                ->timeout(self::UPLOAD_TIMEOUT_SECONDS)
-                ->attach($field, $handle, $fileName, ['Content-Type' => $mimeType]);
+            $response = $this->api->request(botConfig: $botConfig, dto: $dto, timeout: self::UPLOAD_TIMEOUT_SECONDS);
 
-            $payload = ['chat_id' => (string) $chatId];
-
-            if ($caption !== null && $caption !== '') {
-                $payload['caption'] = mb_substr($caption, 0, 1024);
+            if (! $response->ok) {
+                throw new RuntimeException('Telegram API rejected the upload (not-ok response)');
             }
-
-            $response = $request->post(sprintf('/bot%s/%s', $botToken, $method), $payload);
-
-            if ($response->status() === 429) {
-                throw new RateLimitedAfter(max(1, (int) $response->header('retry-after')));
-            }
-
-            if ($response->failed()) {
-                // Bytes are never logged; status only.
-                Log::warning('TTS upload failed', [
-                    'method' => $method,
-                    'status' => $response->status(),
-                    'bot_id' => explode(':', $botToken)[0],
-                ]);
-
-                throw new RuntimeException('Telegram API rejected the upload (HTTP '.$response->status().')');
-            }
-
-            $body = json_decode((string) $response->body(), true);
-
-            if (($body['ok'] ?? null) !== true) {
-                throw new RuntimeException('Telegram API returned not-ok for '.$method);
-            }
-        } finally {
-            fclose($handle);
+        } catch (TgApiRateLimitException $e) {
+            throw new RateLimitedAfter(max(1, $e->getRetryAfter() ?? 1));
         }
     }
 
-    private function rethrow(string $message, \Throwable $previous): never
+    private function rethrow(string $message, Throwable $previous): never
     {
         throw new RuntimeException($message.': '.$previous->getMessage(), 0, $previous);
     }

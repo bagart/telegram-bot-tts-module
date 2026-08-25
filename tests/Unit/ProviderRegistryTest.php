@@ -15,7 +15,7 @@ final class ProviderRegistryTest extends TestCase
 {
     public function test_ships_presets_for_the_documented_catalog(): void
     {
-        $registry = new ProviderRegistry;
+        $registry = new ProviderRegistry();
         $keys = array_keys($registry->all());
 
         foreach (['edge-tts', 'kokoro', 'speaches', 'openai'] as $expected) {
@@ -33,14 +33,14 @@ final class ProviderRegistryTest extends TestCase
 
     public function test_only_openai_preset_needs_a_token(): void
     {
-        foreach ((new ProviderRegistry)->all() as $preset) {
+        foreach ((new ProviderRegistry())->all() as $preset) {
             self::assertSame($preset->key === 'openai', $preset->needsToken);
         }
     }
 
     public function test_generates_a_custom_provider_template_that_passes_validation(): void
     {
-        $config = (new ProviderRegistry)->validateCustomConfig((new ProviderRegistry)->customTemplateJson());
+        $config = (new ProviderRegistry())->validateCustomConfig((new ProviderRegistry())->customTemplateJson());
 
         self::assertSame('https://tts.example.com/v1', $config['base_url']);
         self::assertSame('openai-tts', $config['api_style']);
@@ -51,7 +51,7 @@ final class ProviderRegistryTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
 
-        (new ProviderRegistry)->validateCustomConfig($json);
+        (new ProviderRegistry())->validateCustomConfig($json);
     }
 
     public static function invalidConfigs(): Generator
@@ -102,7 +102,7 @@ final class ProviderRegistryTest extends TestCase
 
     public function test_normalizes_trailing_slashes_and_clamps_lengths(): void
     {
-        $config = (new ProviderRegistry)->validateCustomConfig(json_encode([
+        $config = (new ProviderRegistry())->validateCustomConfig(json_encode([
             'name' => str_repeat('N', 200),
             'base_url' => 'https://gw.test/v1/',
             'model' => str_repeat('m', 500),

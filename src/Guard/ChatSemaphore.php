@@ -17,7 +17,8 @@ class ChatSemaphore
 
     public function __construct(
         private readonly GuardStoreContract $store,
-    ) {}
+    ) {
+    }
 
     public function acquire(string $botId, int $chatId): bool
     {
