@@ -11,6 +11,7 @@ use BAGArt\TelegramBot\Contracts\Processing\Processors\TgModuleProcessorContract
 use BAGArt\TelegramBot\Contracts\TgApi\TgApiTypeDTOContract;
 use BAGArt\TelegramBot\Processing\BotProcessorContext;
 use BAGArt\TelegramBot\Processing\ErrorHandling\ProcessorErrorContext;
+use BAGArt\TelegramBot\Processing\TgProcessorDefaultTrait;
 use BAGArt\TelegramBot\TgApi\Methods\DTO\AnswerCallbackQueryMethodDTO;
 use BAGArt\TelegramBot\TgApi\Methods\DTO\SendMessageMethodDTO;
 use BAGArt\TelegramBot\TgApi\Types\DTO\CallbackQueryTypeDTO;
@@ -35,6 +36,8 @@ use Throwable;
  */
 class MenuProcessor implements TgModuleProcessorContract
 {
+    use TgProcessorDefaultTrait;
+
     public function __construct(
         private readonly TgSenderContract $sender,
         private readonly TgBotApiDTOClientContract $api,
@@ -74,14 +77,6 @@ class MenuProcessor implements TgModuleProcessorContract
         return $dto instanceof CallbackQueryTypeDTO
             && $dto->data !== null
             && CallbackRoute::decode($dto->data) !== null;
-    }
-
-    public function isStrictOrdered(
-        TgApiTypeDTOContract $dto,
-        TgBotConfig $botConfig,
-        ?string $action = null,
-    ): bool {
-        return false;
     }
 
     public function process(

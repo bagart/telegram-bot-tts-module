@@ -11,6 +11,7 @@ use BAGArt\TelegramBot\Contracts\TgApi\TgApiTypeDTOContract;
 use BAGArt\TelegramBot\Modules\TgCommandRegistry;
 use BAGArt\TelegramBot\Processing\BotProcessorContext;
 use BAGArt\TelegramBot\Processing\ErrorHandling\ProcessorErrorContext;
+use BAGArt\TelegramBot\Processing\TgProcessorDefaultTrait;
 use BAGArt\TelegramBot\TgApi\Methods\DTO\SendMessageMethodDTO;
 use BAGArt\TelegramBot\TgApi\Types\DTO\MessageTypeDTO;
 use BAGArt\TelegramBot\TgApi\Types\Enum\ChatPropTypeEnum;
@@ -32,6 +33,8 @@ use Throwable;
  */
 class AutoSpeakProcessor implements TgModuleProcessorContract
 {
+    use TgProcessorDefaultTrait;
+
     public function __construct(
         private readonly TgSenderContract $sender,
         private readonly TtsSettingsService $settings,
@@ -68,14 +71,6 @@ class AutoSpeakProcessor implements TgModuleProcessorContract
             && trim($dto->text) !== ''
             && TgCommandRegistry::parseCommandName($dto->text) === null
             && in_array($dto->chat->type, [ChatPropTypeEnum::PRIVATE, ChatPropTypeEnum::GROUP, ChatPropTypeEnum::SUPERGROUP], true);
-    }
-
-    public function isStrictOrdered(
-        TgApiTypeDTOContract $dto,
-        TgBotConfig $botConfig,
-        ?string $action = null,
-    ): bool {
-        return false;
     }
 
     public function process(
