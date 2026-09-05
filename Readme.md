@@ -1,10 +1,10 @@
-# bagart/telegram-bot-tts-module
+# bagart/tgbot-module-tts
 
 Text-to-speech module for the [BAGArt Telegram bot platform](../../../): turns
 text into Telegram voice notes via `/voice`, plus an opt-in **auto-speak**
 companion mode for private chats. Disabled by default; opt-in per bot/chat.
 
-- Module id: `tts` · composer: `bagart/telegram-bot-tts-module` ·
+- Module id: `tts` · composer: `bagart/tgbot-module-tts` ·
   PSR-4: `BAGArt\TelegramBotTts\`
 - Command: `/voice текст`, reply `/voice` to a text, bare `/voice` → settings panel
 - Providers: self-hosted edge-tts wrapper / Kokoro / Speaches (free) and OpenAI (paid);
@@ -54,9 +54,8 @@ resolves versioned packages from VCS via `composer.prod.json`.
 
 ```bash
 php artisan migrate        # tts_tokens, tts_audio_cache
-# host routes/console.php schedules:
-#   $schedule->command('tts:prune')->daily()->withoutOverlapping()
-#       ->when(config('tts.schedule_prune_enabled', true));
+# tts:prune is self-registered into telegram.modules_schedule (daily by
+# default; periodicity/disable via host config/schedule-overrides.php).
 ```
 
 Enable per bot/chat: `php artisan tg:module:enable tts --bot=<bot_id>`.
@@ -248,9 +247,9 @@ platform → bot → chat, transactional upsert + cache bust):
 Suites are Pest; run from the repo root (host boots Laravel) or module dir:
 
 ```bash
-vendor/bin/pest misc/BAGArt/telegram-bot-tts-module/tests          # from monorepo root
-cd misc/BAGArt/telegram-bot-tts-module && composer test            # module-local
-vendor/bin/pint --format agent misc/BAGArt/telegram-bot-tts-module # style
+vendor/bin/pest misc/BAGArt/tgbot-module-tts/tests          # from monorepo root
+cd misc/BAGArt/tgbot-module-tts && composer test            # module-local
+vendor/bin/pint --format agent misc/BAGArt/tgbot-module-tts # style
 ```
 
 | Suite | Covers |
@@ -286,9 +285,15 @@ admin-only · not strict-ordered (replies async-queued).
 
 ## 12. Relationship with the stt sibling
 
-The `stt` module (`bagart/telegram-bot-stt-module`) is fully independent:
+The `stt` module (`bagart/tgbot-module-stt`) is fully independent:
 separate repo, separate Redis prefixes (`stt:`), tables (`stt_*`), callback
 namespaces (`tc:`) and command namespace (`/text`). Both may run on one bot;
 their features compose without interaction. Shared-kernel extraction trigger:
 a third media-AI consumer appearing ⇒ extract `bagart/telegram-bot-media-ai-lib`
 and rebase both modules; until then no shared package exists.
+
+## Menu integration
+
+Menu-hub surface per `telegram-platform-menu/docs/tasks/menu_integration.md` (M-3b):
+`TtsWebUi` — §8.3 schema form over the same raw keys `TtsSettings::fromArray()`
+reads (auto_speak, provider, voice, limits, quota, error mode).

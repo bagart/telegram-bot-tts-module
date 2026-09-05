@@ -13,22 +13,15 @@ final class TelegramBotTtsServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../config/tts.php', 'tts');
 
+        // The tts:prune schedule is declared in config/tg_modules.php
+        // (schedule) and registered by the module engine, with
+        // schedule-overrides.php user overrides applied.
         $this->app->singleton(Observability\TtsMetricsExporter::class);
         $this->app->singleton(Provider\AdapterSelectorContract::class, Provider\DefaultAdapterSelector::class);
         $this->app->singleton(Guard\GuardStoreContract::class, Guard\RedisGuardStore::class);
 
-        // Composer-installed module discovery (config/telegram.php contract)
-        $providers = (array) Config::get('telegram.modules_providers', []);
-        Config::set('telegram.modules_providers', array_values(array_unique(array_merge(
-            $providers,
-            [TtsModule::class],
-        ))));
-
-        $this->commands([
-            Console\TtsPruneCommand::class,
-            Console\TtsDoctorCommand::class,
-            Console\TtsBenchCommand::class,
-        ]);
+        // Artisan commands are declared in config/tg_modules.php (commands)
+        // and registered by the module engine.
     }
 
     public function boot(): void

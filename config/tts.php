@@ -43,9 +43,6 @@ return [
     // Pending text-input lifetime in seconds (token paste, custom JSON…)
     'pending_input_ttl_seconds' => (int) env('TTS_PENDING_INPUT_TTL', 900),
 
-    // Host schedule gate for tts:prune (routes/console.php)
-    'schedule_prune_enabled' => (bool) env('SCHEDULE_TTS_PRUNE_ENABLED', true),
-
     // Per-preset base_url overrides (e.g. fleet-wide edge wrapper repoint)
     'presets' => [
         'edge-tts' => [

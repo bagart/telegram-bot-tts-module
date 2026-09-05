@@ -13,6 +13,7 @@ use BAGArt\TelegramBot\TgApi\Types\DTO\MessageTypeDTO;
 use BAGArt\TelegramBotTts\Processing\AutoSpeakProcessor;
 use BAGArt\TelegramBotTts\Processing\MenuProcessor;
 use BAGArt\TelegramBotTts\Processing\VoiceCommandProcessor;
+use BAGArt\TelegramBotTts\Web\TtsWebUi;
 
 /**
  * TTS module: turns text into voice notes. Two symmetric entry mechanics —
@@ -33,6 +34,7 @@ class TtsModule implements TgModuleContract
             capabilities: [
                 TgModuleCapability::Processor,
                 TgModuleCapability::Command,
+                TgModuleCapability::Ui,
             ],
             defaultEnabled: false,
             failClosed: false,
@@ -55,5 +57,7 @@ class TtsModule implements TgModuleContract
             VoiceCommandProcessor::NAME,
             VoiceCommandProcessor::class,
         );
+
+        $registrar->webUi(TtsWebUi::class);
     }
 }

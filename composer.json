@@ -1,6 +1,6 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "bagart/telegram-bot-tts-module",
+    "name": "bagart/tgbot-module-tts",
     "description": "Text-to-speech module for the Telegram bot platform: /voice command, auto-speak mode, pluggable TTS providers (OpenAI-compatible and edge-tts), fenced multipart upload",
     "type": "library",
     "license": "MIT",
@@ -40,10 +40,15 @@
         {
             "type": "path",
             "url": "../php-async-kernel-client"
+        },
+        {
+            "type": "path",
+            "url": "../telegram-platform-devops-baseline"
         }
     ],
     "require-dev": {
-        "pestphp/pest": "^4.0"
+        "pestphp/pest": "^4.0",
+        "bagart/telegram-platform-devops-baseline": "@dev"
     },
     "autoload": {
         "psr-4": {
