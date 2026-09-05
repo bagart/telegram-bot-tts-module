@@ -7,7 +7,7 @@ declare(strict_types=1);
 | TTS Module
 |--------------------------------------------------------------------------
 |
-| Text-to-speech module (bagart/telegram-bot-tts-module). Per-chat settings
+| Text-to-speech module (bagart/tgbot-module-tts). Per-chat settings
 | live in tg_module_enablements.module_settings; these are platform
 | defaults and operational limits.
 |
